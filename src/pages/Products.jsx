@@ -39,6 +39,7 @@ export default function Products() {
     description: '',
     image: '',
     available: true,
+    isVeg: true,
   });
 
   const [confirmDeleteProduct, setConfirmDeleteProduct] = useState(null);
@@ -94,6 +95,7 @@ export default function Products() {
       description: '',
       image: '',
       available: true,
+      isVeg: true,
     });
     setModalMode('add');
     setIsModalOpen(true);
@@ -108,6 +110,7 @@ export default function Products() {
       description: product.description || '',
       image: product.image || '',
       available: product.available,
+      isVeg: product.isVeg === undefined ? true : product.isVeg,
     });
     setModalMode('edit');
     setIsModalOpen(true);
@@ -119,6 +122,7 @@ export default function Products() {
       ...formData,
       categoryId: parseInt(formData.categoryId),
       price: parseFloat(formData.price),
+      isVeg: formData.isVeg,
     };
 
     try {
@@ -265,7 +269,14 @@ export default function Products() {
                       <img src={product.image || 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=100&auto=format&fit=crop'} alt={product.name} className="h-full w-full object-cover" />
                     </div>
                   </td>
-                  <td className="p-4 font-bold text-cafeDark">{product.name}</td>
+                  <td className="p-4 font-bold text-cafeDark">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3.5 h-3.5 border flex items-center justify-center p-0.5 rounded-[2px] shrink-0 ${product.isVeg ? 'border-green-600' : 'border-red-650'}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${product.isVeg ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                      </div>
+                      <span>{product.name}</span>
+                    </div>
+                  </td>
                   <td className="p-4 text-cafeDark/60">{product.category?.name || 'Cafe Menu'}</td>
                   <td className="p-4 font-bold text-primary">₹{parseFloat(product.price).toFixed(2)}</td>
                   <td className="p-4">
@@ -449,17 +460,32 @@ export default function Products() {
                 />
               </div>
 
-              <div className="flex items-center gap-3 pt-2">
-                <input
-                  type="checkbox"
-                  id="available-check"
-                  checked={formData.available}
-                  onChange={(e) => setFormData({ ...formData, available: e.target.checked })}
-                  className="h-4 w-4 text-primary focus:ring-primary border-primary/20 rounded"
-                />
-                <label htmlFor="available-check" className="text-xs font-bold text-cafeDark/60 uppercase">
-                  Available in store
-                </label>
+              <div className="flex items-center gap-6 pt-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="available-check"
+                    checked={formData.available}
+                    onChange={(e) => setFormData({ ...formData, available: e.target.checked })}
+                    className="h-4 w-4 text-primary focus:ring-primary border-primary/20 rounded cursor-pointer"
+                  />
+                  <label htmlFor="available-check" className="text-xs font-bold text-cafeDark/60 uppercase cursor-pointer">
+                    Available in store
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isVeg-check"
+                    checked={formData.isVeg}
+                    onChange={(e) => setFormData({ ...formData, isVeg: e.target.checked })}
+                    className="h-4 w-4 text-green-600 focus:ring-green-600 border-primary/20 rounded cursor-pointer"
+                  />
+                  <label htmlFor="isVeg-check" className="text-xs font-bold text-green-600 uppercase cursor-pointer flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span> Veg Product
+                  </label>
+                </div>
               </div>
 
               <div className="flex gap-3 justify-end pt-4 border-t border-primary/5">

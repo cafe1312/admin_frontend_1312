@@ -19,7 +19,9 @@ import {
   Clock,
   Coffee,
   CheckCircle,
-  BarChart2
+  BarChart2,
+  Download,
+  Trash2
 } from 'lucide-react';
 
 function IndianRupeeIcon(props) {
@@ -87,11 +89,86 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState('daily'); // daily, weekly, monthly
 
+  const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
+  const [olderThanDays, setOlderThanDays] = useState('30');
+  const [cleaning, setCleaning] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    console.log("handleDownloadPDF called");
+    try {
+      const token = api.getToken();
+      console.log("Token retrieved:", token ? "Exists" : "MISSING");
+      const url = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'}/reports/weekly-pdf`;
+      console.log("Requesting URL:", url);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log("Response status:", response.status);
+      if (response.ok) {
+        const blob = await response.blob();
+        console.log("Blob size:", blob.size);
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `weekly-sales-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(downloadUrl);
+        console.log("Download triggered successfully");
+      } else {
+        const text = await response.text();
+        console.error("Backend error response:", text);
+        alert(`Failed to generate report PDF: ${response.status} ${text}`);
+      }
+    } catch (err) {
+      console.error("Download exception:", err);
+      alert('Error downloading report PDF: ' + err.message);
+    }
+  };
+
+  const handleCleanDatabase = async () => {
+    setCleaning(true);
+    try {
+      const res = await api.delete(`/orders/cleanup?olderThanDays=${olderThanDays}`);
+      if (res.success) {
+        alert(res.message);
+        setCleanupModalOpen(false);
+        // Refresh dashboard stats
+        const [statsRes, salesRes] = await Promise.all([
+          api.get('/reports/stats'),
+          api.get(`/reports/sales?range=${range}`)
+        ]);
+        if (statsRes.success) {
+          setStats(statsRes.stats);
+          setPopularProducts(statsRes.popularProducts || MOCK_POPULAR);
+        }
+        if (salesRes.success && salesRes.chartData?.length) {
+          setChartData(salesRes.chartData);
+        }
+      } else {
+        alert(res.message || 'Failed to clean up database');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error cleaning database');
+    } finally {
+      setCleaning(false);
+    }
+  };
+
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const statsRes = await api.get('/reports/stats');
-        const salesRes = await api.get(`/reports/sales?range=${range}`);
+        const [statsRes, salesRes] = await Promise.all([
+          api.get('/reports/stats'),
+          api.get(`/reports/sales?range=${range}`)
+        ]);
         
         if (statsRes.success) {
           setStats(statsRes.stats);
@@ -116,6 +193,8 @@ export default function Dashboard() {
       }
     }
     loadDashboard();
+    const interval = setInterval(loadDashboard, 10000);
+    return () => clearInterval(interval);
   }, [range]);
 
   if (loading) return <Spinner />;
@@ -180,6 +259,28 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Dashboard Actions Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-primary/10 rounded-2xl p-5 shadow-sm animate-fade-in">
+        <div>
+          <h1 className="font-serif text-lg font-bold text-cafeDark">Dashboard Overview</h1>
+          <p className="text-xs text-cafeDark/50 font-medium">Monitor your cafe sales performance and manage storage.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleDownloadPDF}
+            className="flex items-center gap-2 h-10 px-4 bg-primary text-cafeDark text-xs font-bold rounded-xl hover:bg-cafeDark hover:text-primary transition-all duration-300 shadow-sm"
+          >
+            <Download className="h-4 w-4" /> Download Weekly PDF
+          </button>
+          <button
+            onClick={() => setCleanupModalOpen(true)}
+            className="flex items-center gap-2 h-10 px-4 border border-red-200 text-red-600 text-xs font-bold rounded-xl hover:bg-red-50 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" /> Clean Database
+          </button>
+        </div>
+      </div>
+
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         
@@ -260,22 +361,22 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Popular Items Card */}
+        {/* Product Sales Quantities Card */}
         <div className="lg:col-span-4 bg-white border border-primary/10 rounded-2xl p-6 shadow-sm flex flex-col space-y-4">
           <div className="flex items-center gap-2 border-b border-primary/5 pb-4">
             <Coffee className="h-5 w-5 text-primary" />
-            <h2 className="text-sm font-bold text-cafeDark">Popular Products</h2>
+            <h2 className="text-sm font-bold text-cafeDark">Product Sales Quantities</h2>
           </div>
 
-          <div className="space-y-4 flex-1 overflow-y-auto max-h-72 pr-1">
+          <div className="space-y-4 flex-1 overflow-y-auto max-h-96 pr-1">
             {popularProducts.map((item, index) => (
               <div key={item.id} className="flex items-center gap-3">
                 <div className="h-11 w-11 shrink-0 rounded-xl overflow-hidden bg-primary/10">
-                  <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                  <img src={item.image || 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=100&auto=format&fit=crop'} alt={item.name} className="h-full w-full object-cover" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-cafeDark truncate">{item.name}</p>
-                  <p className="text-[10px] text-cafeDark/40 font-semibold uppercase mt-0.5">{item.quantitySold} sales</p>
+                  <p className="text-[10px] text-cafeDark/45 font-bold uppercase mt-0.5">{item.quantitySold} sold</p>
                 </div>
                 <span className="text-xs font-bold text-primary">₹{item.price.toFixed(2)}</span>
               </div>
@@ -283,6 +384,49 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Cleanup Database Modal */}
+      {cleanupModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-cafeDark/50 backdrop-blur-sm p-4">
+          <div className="bg-white border border-primary/10 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in space-y-4">
+            <h3 className="font-serif text-lg font-bold text-cafeDark flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" /> Free Up Storage Space
+            </h3>
+            <p className="text-xs text-cafeDark/70 leading-relaxed">
+              Purging orders deletes them permanently from the database. This will help free up storage space. Warning: Active/live orders and historical records will be deleted based on the timeframe selected.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Delete Orders older than:</label>
+              <select
+                value={olderThanDays}
+                onChange={(e) => setOlderThanDays(e.target.value)}
+                className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none font-semibold text-cafeDark"
+              >
+                <option value="7">7 Days</option>
+                <option value="30">30 Days</option>
+                <option value="90">90 Days</option>
+                <option value="0">Delete ALL Orders (Live & History)</option>
+              </select>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setCleanupModalOpen(false)}
+                disabled={cleaning}
+                className="flex-1 h-10 border border-primary/10 text-cafeDark/60 text-xs font-bold rounded-xl hover:bg-primary/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCleanDatabase}
+                disabled={cleaning}
+                className="flex-1 h-10 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {cleaning ? 'Cleaning...' : 'Confirm Purge'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

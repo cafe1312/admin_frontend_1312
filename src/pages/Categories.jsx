@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import Spinner from '../components/Spinner';
-import { Plus, Trash2, Search, X } from 'lucide-react';
+import { Plus, Trash2, Edit2, Search, X } from 'lucide-react';
 
 const SEED_CATEGORIES = [
   { id: 1, name: 'Coffee', image: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=300&auto=format&fit=crop' },
@@ -17,8 +17,12 @@ export default function Categories() {
   
   // Modal & Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatImage, setNewCatImage] = useState('');
+  const [modalMode, setModalMode] = useState('add'); // 'add' or 'edit'
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [catName, setCatName] = useState('');
+  const [catImage, setCatImage] = useState('');
+  const [availableFrom, setAvailableFrom] = useState('');
+  const [availableTo, setAvailableTo] = useState('');
   const [confirmDeleteCat, setConfirmDeleteCat] = useState(null);
 
   const loadCategories = async () => {
@@ -41,29 +45,66 @@ export default function Categories() {
     loadCategories();
   }, []);
 
-  const handleCreate = async (e) => {
+  const handleOpenAddModal = () => {
+    setModalMode('add');
+    setSelectedCategory(null);
+    setCatName('');
+    setCatImage('');
+    setAvailableFrom('');
+    setAvailableTo('');
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (cat) => {
+    setModalMode('edit');
+    setSelectedCategory(cat);
+    setCatName(cat.name);
+    setCatImage(cat.image || '');
+    setAvailableFrom(cat.availableFrom || '');
+    setAvailableTo(cat.availableTo || '');
+    setIsModalOpen(true);
+  };
+
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (!newCatName.trim()) return;
+    if (!catName.trim()) return;
 
     const payload = {
-      name: newCatName,
-      image: newCatImage.trim() || undefined,
+      name: catName,
+      image: catImage.trim() || undefined,
+      availableFrom: availableFrom.trim() || null,
+      availableTo: availableTo.trim() || null,
     };
 
     try {
-      const res = await api.post('/categories', payload);
-      if (res.success) {
-        loadCategories();
+      if (modalMode === 'add') {
+        const res = await api.post('/categories', payload);
+        if (res.success) {
+          loadCategories();
+        } else {
+          const mockNew = {
+            id: Date.now(),
+            ...payload,
+          };
+          setCategories([mockNew, ...categories]);
+        }
       } else {
-        const mockNew = {
-          id: Date.now(),
-          ...payload,
-        };
-        setCategories([mockNew, ...categories]);
+        const res = await api.put(`/categories/${selectedCategory.id}`, payload);
+        if (res.success) {
+          loadCategories();
+        } else {
+          setCategories(
+            categories.map((c) =>
+              c.id === selectedCategory.id ? { ...c, ...payload } : c
+            )
+          );
+        }
       }
       setIsModalOpen(false);
-      setNewCatName('');
-      setNewCatImage('');
+      setCatName('');
+      setCatImage('');
+      setAvailableFrom('');
+      setAvailableTo('');
     } catch (err) {
       console.error(err);
       setIsModalOpen(false);
@@ -108,7 +149,7 @@ export default function Categories() {
         </div>
 
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={handleOpenAddModal}
           className="flex items-center gap-2 h-10 px-5 bg-primary text-cafeDark text-xs font-semibold rounded-xl hover:bg-cafeDark hover:text-primary transition-all duration-300 w-full sm:w-auto justify-center"
         >
           <Plus className="h-4 w-4" />
@@ -134,15 +175,29 @@ export default function Categories() {
             <div className="p-4 flex items-center justify-between">
               <div>
                 <h4 className="text-xs font-bold text-cafeDark">{cat.name}</h4>
+                <p className="text-[9px] text-cafeDark/45 font-bold mt-1 uppercase tracking-wider">
+                  {cat.availableFrom && cat.availableTo 
+                    ? `Hours: ${cat.availableFrom} - ${cat.availableTo}` 
+                    : 'Available: All Day'}
+                </p>
               </div>
               
-              <button
-                onClick={() => setConfirmDeleteCat(cat)}
-                className="p-2 text-cafeDark/30 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                title="Delete Category"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => handleOpenEditModal(cat)}
+                  className="p-2 text-cafeDark/30 hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
+                  title="Edit Category"
+                >
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setConfirmDeleteCat(cat)}
+                  className="p-2 text-cafeDark/30 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                  title="Delete Category"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -180,26 +235,28 @@ export default function Categories() {
         </div>
       )}
 
-      {/* Add Modal */}
+      {/* Add / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-adminDark/20 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white border border-primary/10 max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-6">
             <div className="flex items-center justify-between border-b border-primary/5 pb-3">
-              <h3 className="font-serif text-lg font-bold text-cafeDark">Add Category</h3>
+              <h3 className="font-serif text-lg font-bold text-cafeDark">
+                {modalMode === 'add' ? 'Add Category' : 'Edit Category'}
+              </h3>
               <button onClick={() => setIsModalOpen(false)} className="p-1 rounded-full hover:bg-cafeDark/5">
                 <X className="h-5 w-5 text-cafeDark/60" />
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleFormSubmit} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Category Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Coffee"
-                  value={newCatName}
-                  onChange={(e) => setNewCatName(e.target.value)}
+                  value={catName}
+                  onChange={(e) => setCatName(e.target.value)}
                   className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
                 />
               </div>
@@ -209,10 +266,32 @@ export default function Categories() {
                 <input
                   type="text"
                   placeholder="https://images.unsplash.com..."
-                  value={newCatImage}
-                  onChange={(e) => setNewCatImage(e.target.value)}
+                  value={catImage}
+                  onChange={(e) => setCatImage(e.target.value)}
                   className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Available From (Optional)</label>
+                  <input
+                    type="time"
+                    value={availableFrom}
+                    onChange={(e) => setAvailableFrom(e.target.value)}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Available To (Optional)</label>
+                  <input
+                    type="time"
+                    value={availableTo}
+                    onChange={(e) => setAvailableTo(e.target.value)}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="flex gap-3 justify-end pt-4 border-t border-primary/5">
@@ -227,7 +306,7 @@ export default function Categories() {
                   type="submit"
                   className="px-5 h-10 bg-primary text-cafeDark hover:bg-cafeDark hover:text-primary rounded-xl text-xs font-semibold transition-all duration-300"
                 >
-                  Create
+                  {modalMode === 'add' ? 'Create' : 'Save Changes'}
                 </button>
               </div>
             </form>

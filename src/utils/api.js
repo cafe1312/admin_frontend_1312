@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:5000/api`;
 
 const api = {
   getToken: () => localStorage.getItem('1312_admin_token'),
@@ -24,6 +24,11 @@ const api = {
       method: 'GET',
       headers: api.getHeaders(),
     });
+    if (res.status === 401) {
+      api.clearToken();
+      window.location.href = '/login';
+      return { success: false, message: 'Session expired' };
+    }
     return res.json();
   },
 
@@ -33,6 +38,11 @@ const api = {
       headers: api.getHeaders(),
       body: JSON.stringify(body),
     });
+    if (res.status === 401) {
+      api.clearToken();
+      window.location.href = '/login';
+      return { success: false, message: 'Session expired' };
+    }
     return res.json();
   },
 
@@ -42,6 +52,11 @@ const api = {
       headers: api.getHeaders(),
       body: JSON.stringify(body),
     });
+    if (res.status === 401) {
+      api.clearToken();
+      window.location.href = '/login';
+      return { success: false, message: 'Session expired' };
+    }
     return res.json();
   },
 
@@ -50,6 +65,11 @@ const api = {
       method: 'DELETE',
       headers: api.getHeaders(),
     });
+    if (res.status === 401) {
+      api.clearToken();
+      window.location.href = '/login';
+      return { success: false, message: 'Session expired' };
+    }
     return res.json();
   },
 };

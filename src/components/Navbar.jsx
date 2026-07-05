@@ -1,7 +1,7 @@
 import React from 'react';
-import { Menu, User, Bell } from 'lucide-react';
+import { Menu, User } from 'lucide-react';
 
-export default function Navbar({ toggleSidebar, title = "Dashboard" }) {
+export default function Navbar({ toggleSidebar, title = "Dashboard", audioState }) {
   const user = JSON.parse(localStorage.getItem('1312_admin_user') || '{"username":"Admin"}');
 
   return (
@@ -20,11 +20,7 @@ export default function Navbar({ toggleSidebar, title = "Dashboard" }) {
 
       {/* Top Bar Actions */}
       <div className="flex items-center gap-4">
-        {/* Notifications */}
-        <button className="p-2 text-cafeDark/60 hover:text-primary transition-colors relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary ring-2 ring-background"></span>
-        </button>
+
 
         {/* Profile Card Info */}
         <div className="flex items-center gap-2 border-l border-primary/10 pl-4">

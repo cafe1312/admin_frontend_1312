@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import Spinner from '../components/Spinner';
-import { ShoppingBag, ChevronRight, User, Phone, Check, RefreshCw, XCircle } from 'lucide-react';
+import { ShoppingBag, ChevronRight, User, Phone, Check, RefreshCw, XCircle, Download, Trash2 } from 'lucide-react';
 
 const SEED_ORDERS = [
   {
@@ -48,6 +48,33 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [cancelTimeLeft, setCancelTimeLeft] = useState(0);
+
+  useEffect(() => {
+    if (!selectedOrder || selectedOrder.status !== 'PENDING') {
+      setCancelTimeLeft(0);
+      return;
+    }
+
+    const checkTime = () => {
+      const placedTime = new Date(selectedOrder.createdAt).getTime();
+      const elapsed = (Date.now() - placedTime) / 1000;
+      const remaining = Math.max(0, 10 - elapsed);
+      return Math.ceil(remaining);
+    };
+
+    setCancelTimeLeft(checkTime());
+
+    const timer = setInterval(() => {
+      const remaining = checkTime();
+      setCancelTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [selectedOrder]);
 
   const fetchOrders = async () => {
     try {
@@ -64,6 +91,7 @@ export default function Orders() {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchOrders();
@@ -99,6 +127,49 @@ export default function Orders() {
     }
   };
 
+  const handleUpdatePaymentStatus = async (orderId, newPaymentStatus) => {
+    try {
+      const res = await api.put(`/orders/${orderId}/status`, { paymentStatus: newPaymentStatus });
+      if (res.success) {
+        setOrders(orders.map(o => o.id === orderId ? { ...o, paymentStatus: newPaymentStatus } : o));
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder({ ...selectedOrder, paymentStatus: newPaymentStatus });
+        }
+      } else {
+        // mock bypass
+        setOrders(orders.map(o => o.id === orderId ? { ...o, paymentStatus: newPaymentStatus } : o));
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder({ ...selectedOrder, paymentStatus: newPaymentStatus });
+        }
+      }
+    } catch (err) {
+      setOrders(orders.map(o => o.id === orderId ? { ...o, paymentStatus: newPaymentStatus } : o));
+      if (selectedOrder?.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, paymentStatus: newPaymentStatus });
+      }
+    }
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!selectedOrder) return;
+    if (!window.confirm(`Are you sure you want to delete order #${selectedOrder.id} completely from the database?`)) {
+      return;
+    }
+
+    try {
+      const res = await api.delete(`/orders/${selectedOrder.id}`);
+      if (res.success) {
+        alert('Order deleted successfully.');
+        setSelectedOrder(null);
+        fetchOrders();
+      } else {
+        alert(res.message || 'Failed to delete order.');
+      }
+    } catch (err) {
+      alert('Error deleting order.');
+    }
+  };
+
   const filteredOrders = orders.filter((o) =>
     statusFilter === 'ALL' ? true : o.status === statusFilter
   );
@@ -126,7 +197,7 @@ export default function Orders() {
           className="ml-auto p-2 border border-primary/10 hover:bg-primary/10 rounded-xl transition-all"
           title="Refresh orders list"
         >
-          <RefreshCw className="h-4 w-4 text-cafeDark/60 animate-hover" />
+          <RefreshCw className="h-4 w-4 text-cafeDark/60" />
         </button>
       </div>
 
@@ -200,15 +271,52 @@ export default function Orders() {
                 <span className="text-sm font-bold text-primary">₹{parseFloat(selectedOrder.totalAmount).toFixed(2)}</span>
               </div>
 
-              {/* Customer Info */}
-              <div className="space-y-2.5 text-xs text-cafeDark/70 bg-primary/5 p-4 rounded-xl border border-primary/10">
-                <p className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-primary shrink-0" />
-                  <span className="font-bold">{selectedOrder.customer?.name}</span>
-                </p>
+              {/* Customer & Delivery Info */}
+              <div className="space-y-3 text-xs text-cafeDark/70 bg-primary/5 p-4 rounded-xl border border-primary/10">
+                <div className="flex justify-between items-center border-b border-primary/5 pb-2">
+                  <p className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-primary shrink-0" />
+                    <span className="font-bold">{selectedOrder.customer?.name}</span>
+                  </p>
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                    selectedOrder.deliveryMethod === 'DELIVERY' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'
+                  }`}>
+                    {selectedOrder.deliveryMethod || 'TAKEAWAY'}
+                  </span>
+                </div>
                 <p className="flex items-center gap-2">
                   <Phone className="h-4 w-4 text-primary shrink-0" />
                   <span>{selectedOrder.customer?.phone}</span>
+                </p>
+                {selectedOrder.deliveryMethod === 'DELIVERY' && (selectedOrder.address || selectedOrder.customer?.address) && (
+                  <div className="border-t border-primary/5 pt-2 space-y-2">
+                    <p className="text-[11px] text-cafeDark/80">
+                      <span className="font-bold block text-[9px] text-cafeDark/40 uppercase">Delivery Address:</span>
+                      <span className="mt-0.5 block leading-normal">{selectedOrder.address || selectedOrder.customer?.address}</span>
+                    </p>
+                    {selectedOrder.distance !== undefined && selectedOrder.distance !== null && (
+                      <div className="grid grid-cols-2 gap-2 text-[10px] text-cafeDark/70 bg-cafeDark/5 p-2 rounded-xl border border-primary/5 mt-2 animate-fade-in">
+                        <div>
+                          <span className="font-bold block text-[8px] text-cafeDark/40 uppercase">Distance:</span>
+                          <span>{parseFloat(selectedOrder.distance).toFixed(2)} km</span>
+                        </div>
+                        <div>
+                          <span className="font-bold block text-[8px] text-cafeDark/40 uppercase">Delivery Fee:</span>
+                          <span>₹{parseFloat(selectedOrder.deliveryCharges || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="font-bold block text-[8px] text-cafeDark/40 uppercase">Live Coordinates:</span>
+                          <span className="font-mono">Lat: {parseFloat(selectedOrder.latitude).toFixed(6)}, Lon: {parseFloat(selectedOrder.longitude).toFixed(6)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="border-t border-primary/5 pt-2 flex justify-between items-center text-[10px] font-semibold text-cafeDark/60">
+                  <span>Payment: <strong className="text-cafeDark">{selectedOrder.paymentMethod}</strong></span>
+                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+                    selectedOrder.paymentStatus === 'PAID' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                  }`}>{selectedOrder.paymentStatus}</span>
                 </p>
               </div>
 
@@ -232,12 +340,27 @@ export default function Orders() {
                 <p className="text-[10px] font-bold text-cafeDark/40 uppercase tracking-widest">Action Status Flow</p>
                 
                 <div className="grid grid-cols-2 gap-2">
+                  {selectedOrder.paymentStatus === 'PENDING' && selectedOrder.status !== 'CANCELLED' && (
+                    <button
+                      onClick={() => handleUpdatePaymentStatus(selectedOrder.id, 'PAID')}
+                      className="col-span-2 flex items-center justify-center gap-2 h-10 bg-primary text-cafeDark text-xs font-bold rounded-xl hover:bg-cafeDark hover:text-primary transition-all duration-300 shadow-sm"
+                    >
+                      <Check className="h-4 w-4" /> Payment Received
+                    </button>
+                  )}
+
                   {selectedOrder.status === 'PENDING' && (
                     <button
+                      disabled={cancelTimeLeft > 0}
                       onClick={() => handleUpdateStatus(selectedOrder.id, 'PREPARING')}
-                      className="col-span-2 flex items-center justify-center gap-2 h-10 bg-primary text-cafeDark text-xs font-bold rounded-xl hover:bg-cafeDark hover:text-primary transition-colors"
+                      className={`col-span-2 flex items-center justify-center gap-2 h-10 text-xs font-bold rounded-xl transition-all ${
+                        cancelTimeLeft > 0 
+                          ? 'bg-cafeDark/10 text-cafeDark/30 cursor-not-allowed' 
+                          : 'bg-primary text-cafeDark hover:bg-cafeDark hover:text-primary shadow-sm'
+                      }`}
                     >
-                      <Check className="h-4 w-4" /> Accept Order
+                      <Check className="h-4 w-4" /> 
+                      {cancelTimeLeft > 0 ? `Wait (${cancelTimeLeft}s)` : 'Accept Order'}
                     </button>
                   )}
 
@@ -261,12 +384,33 @@ export default function Orders() {
 
                   {selectedOrder.status !== 'COMPLETED' && selectedOrder.status !== 'CANCELLED' && (
                     <button
+                      disabled={selectedOrder.status === 'PENDING' && cancelTimeLeft > 0}
                       onClick={() => handleUpdateStatus(selectedOrder.id, 'CANCELLED')}
-                      className="col-span-2 flex items-center justify-center gap-2 h-10 border border-red-200 hover:bg-red-50 text-red-600 text-xs font-bold rounded-xl transition-colors"
+                      className={`col-span-2 flex items-center justify-center gap-2 h-10 border text-xs font-bold rounded-xl transition-colors ${
+                        selectedOrder.status === 'PENDING' && cancelTimeLeft > 0
+                          ? 'border-cafeDark/5 text-cafeDark/20 cursor-not-allowed bg-transparent'
+                          : 'border-red-200 hover:bg-red-50 text-red-600'
+                      }`}
                     >
                       <XCircle className="h-4 w-4" /> Cancel Order
                     </button>
                   )}
+
+                  {/* Delete button (If order is more than 3 days old) */}
+                  {(() => {
+                    const elapsedDays = (Date.now() - new Date(selectedOrder.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+                    if (elapsedDays >= 3) {
+                      return (
+                        <button
+                          onClick={handleDeleteOrder}
+                          className="col-span-2 mt-2 flex items-center justify-center gap-2 h-10 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" /> Delete Order from DB
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
 
