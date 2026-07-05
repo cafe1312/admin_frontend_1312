@@ -42,13 +42,13 @@ export default function Login() {
       }
     } catch (err) {
       console.warn('API error, falling back to mock bypass for testing');
-      if (formData.username === 'admin' && formData.password === 'admin') {
+      if (formData.username === 'cafe1312' && formData.password === '1312Cafe@1312') {
         // mock bypass for immediate testing offline
         api.setToken('mock_jwt_token_for_dashboard');
-        localStorage.setItem('1312_admin_user', JSON.stringify({ username: 'admin', role: 'admin' }));
+        localStorage.setItem('1312_admin_user', JSON.stringify({ username: 'cafe1312', role: 'admin' }));
         navigate('/');
       } else {
-        setError('Connection failed. Default login: admin / admin.');
+        setError('Connection failed. Default login: cafe1312 / 1312Cafe@1312.');
       }
     } finally {
       setLoading(false);
@@ -121,7 +121,7 @@ export default function Login() {
 
         <div className="text-center pt-2">
           <p className="text-[10px] text-cafeDark/40 uppercase tracking-wider font-semibold">
-            Default credentials: <span className="text-primary font-bold">admin</span> / <span className="text-primary font-bold">admin</span>
+            Default credentials: <span className="text-primary font-bold">cafe1312</span> / <span className="text-primary font-bold">1312Cafe@1312</span>
           </p>
         </div>
       </div>
