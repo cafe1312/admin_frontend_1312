@@ -77,7 +77,7 @@ export default function Login() {
                 type="text"
                 name="username"
                 required
-                placeholder="admin"
+                placeholder="Enter your username"
                 value={formData.username}
                 onChange={handleChange}
                 className="w-full h-11 pl-11 pr-4 bg-background border border-primary/20 rounded-2xl text-sm focus:border-primary focus:outline-none placeholder:text-cafeDark/30"
@@ -119,11 +119,7 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="text-center pt-2">
-          <p className="text-[10px] text-cafeDark/40 uppercase tracking-wider font-semibold">
-            Default credentials: <span className="text-primary font-bold">cafe1312</span> / <span className="text-primary font-bold">1312Cafe@1312</span>
-          </p>
-        </div>
+        {/* Helper credentials removed for production security */}
       </div>
     </div>
   );
