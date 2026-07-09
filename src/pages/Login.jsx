@@ -41,13 +41,7 @@ export default function Login() {
         setError(res.message || 'Invalid credentials.');
       }
     } catch (err) {
-      console.warn('API error, falling back to mock bypass for testing');
-      if (formData.username === 'cafe1312' && formData.password === '1312Cafe@1312') {
-        // mock bypass for immediate testing offline
-        api.setToken('mock_jwt_token_for_dashboard');
-        localStorage.setItem('1312_admin_user', JSON.stringify({ username: 'cafe1312', role: 'admin' }));
-        navigate('/');
-      }
+      setError(err.message || 'Connection to authentication server failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -119,7 +113,7 @@ export default function Login() {
           </div>
         </form>
 
-
+        {/* Helper credentials removed for production security */}
       </div>
     </div>
   );
