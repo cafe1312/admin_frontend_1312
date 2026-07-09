@@ -42,13 +42,11 @@ export default function Login() {
       }
     } catch (err) {
       console.warn('API error, falling back to mock bypass for testing');
-      if (formData.username === 'admin' && formData.password === 'admin') {
+      if (formData.username === 'cafe1312' && formData.password === '1312Cafe@1312') {
         // mock bypass for immediate testing offline
         api.setToken('mock_jwt_token_for_dashboard');
-        localStorage.setItem('1312_admin_user', JSON.stringify({ username: 'admin', role: 'admin' }));
+        localStorage.setItem('1312_admin_user', JSON.stringify({ username: 'cafe1312', role: 'admin' }));
         navigate('/');
-      } else {
-        setError('Connection failed. Default login: admin / admin.');
       }
     } finally {
       setLoading(false);
@@ -77,7 +75,7 @@ export default function Login() {
                 type="text"
                 name="username"
                 required
-                placeholder="admin"
+                placeholder="Enter your username"
                 value={formData.username}
                 onChange={handleChange}
                 className="w-full h-11 pl-11 pr-4 bg-background border border-primary/20 rounded-2xl text-sm focus:border-primary focus:outline-none placeholder:text-cafeDark/30"
@@ -109,21 +107,19 @@ export default function Login() {
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex items-center justify-center gap-2 h-11 w-full bg-cafeDark text-background font-semibold rounded-2xl hover:bg-primary hover:text-cafeDark transition-all duration-300 shadow-md shadow-cafeDark/10 disabled:opacity-50"
-          >
-            <LogIn className="h-4.5 w-4.5" />
-            <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex items-center justify-center gap-2 h-11 w-full bg-cafeDark text-background font-semibold rounded-2xl hover:bg-primary hover:text-cafeDark transition-all duration-300 shadow-md shadow-cafeDark/10 disabled:opacity-50"
+            >
+              <LogIn className="h-4.5 w-4.5" />
+              <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
+            </button>
+          </div>
         </form>
 
-        <div className="text-center pt-2">
-          <p className="text-[10px] text-cafeDark/40 uppercase tracking-wider font-semibold">
-            Default credentials: <span className="text-primary font-bold">admin</span> / <span className="text-primary font-bold">admin</span>
-          </p>
-        </div>
+
       </div>
     </div>
   );

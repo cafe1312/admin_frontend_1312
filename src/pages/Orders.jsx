@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import Spinner from '../components/Spinner';
-import { ShoppingBag, ChevronRight, User, Phone, Check, RefreshCw, XCircle, Download, Trash2 } from 'lucide-react';
+import { ShoppingBag, ChevronRight, User, Phone, Check, RefreshCw, XCircle, Download, Trash2, Printer } from 'lucide-react';
 
 const SEED_ORDERS = [
   {
@@ -49,6 +49,22 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [cancelTimeLeft, setCancelTimeLeft] = useState(0);
+  const [printSize, setPrintSize] = useState('3in-a');
+  const [cafeSettings, setCafeSettings] = useState(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await api.get('/settings');
+        if (res.success && res.settings) {
+          setCafeSettings(res.settings);
+        }
+      } catch (err) {
+        console.error('Error fetching settings for printing:', err);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     if (!selectedOrder || selectedOrder.status !== 'PENDING') {
@@ -168,6 +184,301 @@ export default function Orders() {
     } catch (err) {
       alert('Error deleting order.');
     }
+  };
+
+  const handlePrintKOT = (order) => {
+    const totalItems = order.items.reduce((s, i) => s + i.quantity, 0);
+    const dateTimeStr = new Date(order.createdAt).toLocaleString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    const isCompact = printSize.endsWith('-b');
+    const widthStyle = printSize.startsWith('3in') ? '72mm' : '48mm';
+
+    let kotHtml = '';
+
+    if (!isCompact) {
+      // Standard A layout
+      kotHtml = `
+        <div class="text-center bold" style="font-size: 1.25em; margin-bottom: 2px;">KITCHEN ORDER TICKET</div>
+        <div class="text-center" style="font-size: 0.9em; margin-bottom: 5px;">--- LIVE ORDER ---</div>
+        <div class="line"></div>
+        <div><span class="bold">Order ID:</span> #${order.id}</div>
+        <div><span class="bold">Date/Time:</span> ${dateTimeStr}</div>
+        <div><span class="bold">Customer:</span> ${order.customer?.name || 'Walk-in'}</div>
+        <div class="line"></div>
+        <div class="bold" style="margin-top: 5px; margin-bottom: 3px; font-size: 1.05em;">ITEMS:</div>
+        <table style="font-size: 1em;">
+          ${order.items.map(item => `
+            <tr class="item-row">
+              <td style="width: 80%;">${item.product?.name}</td>
+              <td style="width: 20%; text-align: right;" class="bold">x${item.quantity}</td>
+            </tr>
+          `).join('')}
+        </table>
+        <div class="line"></div>
+        <div class="bold" style="font-size: 1.1em; text-align: right; margin-top: 5px;">Total Qty: ${totalItems}</div>
+        <div class="line"></div>
+      `;
+    } else {
+      // Compact B layout (all uppercase, very condensed)
+      kotHtml = `
+        <div class="text-center bold" style="font-size: 1.05em; letter-spacing: 0.5px;">* KITCHEN TICKET *</div>
+        <div class="line"></div>
+        <div>ORDER ID: #${order.id}</div>
+        <div>DATE/TIME: ${dateTimeStr.toUpperCase()}</div>
+        <div>CLIENT: ${(order.customer?.name || 'WALK-IN').toUpperCase()}</div>
+        <div class="line"></div>
+        <table style="font-size: 0.95em;">
+          ${order.items.map(item => `
+            <tr class="item-row">
+              <td><strong>${item.product?.name.toUpperCase()}</strong></td>
+              <td style="text-align: right; font-weight: bold; font-size: 1.1em;">* ${item.quantity}</td>
+            </tr>
+          `).join('')}
+        </table>
+        <div class="line"></div>
+        <div style="font-weight: bold;">TOTAL ITEMS: ${totalItems}</div>
+        <div class="line"></div>
+      `;
+    }
+
+    printReceipt(kotHtml, widthStyle, isCompact);
+  };
+
+  const handlePrintBill = (order) => {
+    const cafeName = cafeSettings?.cafeName || '1312 Cafe';
+    const cafeAddress = cafeSettings?.address || '1312 Gourmet St, Culinary City';
+    const cafePhone = cafeSettings?.phone || '+1 234 567 8900';
+    const taxPercentage = cafeSettings ? parseFloat(cafeSettings.taxPercentage) : 8.0;
+
+    const dateTimeStr = new Date(order.createdAt).toLocaleString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    const isPaid = order.paymentStatus === 'PAID';
+    const paymentStatusLabel = isPaid ? 'PAID' : 'UNPAID';
+
+    // Calculate billing details mathematically
+    const subtotal = order.items.reduce((s, i) => s + i.price * i.quantity, 0);
+    const deliveryCharges = order.deliveryCharges || 0;
+    const taxableAmount = Math.max(0, (order.totalAmount - deliveryCharges) / (1 + taxPercentage / 100));
+    const discountAmount = Math.max(0, subtotal - taxableAmount);
+    const taxAmount = taxableAmount * (taxPercentage / 100);
+
+    const isCompact = printSize.endsWith('-b');
+    const widthStyle = printSize.startsWith('3in') ? '72mm' : '48mm';
+
+    let billHtml = '';
+
+    if (!isCompact) {
+      // Standard A layout
+      billHtml = `
+        <div class="text-center bold" style="font-size: 1.35em; margin-bottom: 2px;">${cafeName}</div>
+        <div class="text-center" style="font-size: 0.85em; margin-bottom: 5px; line-height: 1.2;">
+          ${cafeAddress}<br>Phone: ${cafePhone}
+        </div>
+        <div class="double-line"></div>
+        <div><span class="bold">Order ID:</span> #${order.id}</div>
+        <div><span class="bold">Date/Time:</span> ${dateTimeStr}</div>
+        <div><span class="bold">Payment:</span> <span class="bold" style="border: 1px solid #000; padding: 0 4px;">${paymentStatusLabel}</span> (${order.paymentMethod})</div>
+        <div class="line"></div>
+        <div><span class="bold">Customer:</span> ${order.customer?.name}</div>
+        ${order.customer?.phone ? `<div><span class="bold">Phone:</span> ${order.customer.phone}</div>` : ''}
+        ${order.deliveryMethod === 'DELIVERY' && (order.address || order.customer?.address) ? `
+          <div style="margin-top: 3px; font-size: 0.9em; line-height: 1.2;">
+            <span class="bold">Delivery Address:</span><br>${order.address || order.customer.address}
+          </div>
+        ` : '<div><span class="bold">Method:</span> TAKEAWAY</div>'}
+        <div class="double-line"></div>
+        <table style="width: 100%; font-size: 0.95em;">
+          <thead>
+            <tr style="border-bottom: 1px dashed #000;">
+              <th style="width: 55%; font-weight: bold;">Item</th>
+              <th style="width: 15%; font-weight: bold; text-align: center;">Qty</th>
+              <th style="width: 30%; font-weight: bold; text-align: right;">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${order.items.map(item => `
+              <tr class="item-row">
+                <td>${item.product?.name}</td>
+                <td style="text-align: center;">${item.quantity}</td>
+                <td style="text-align: right;">₹${(item.price * item.quantity).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="line"></div>
+        <table style="width: 100%; font-size: 0.95em; line-height: 1.4;">
+          <tr>
+            <td>Subtotal:</td>
+            <td style="text-align: right;">₹${subtotal.toFixed(2)}</td>
+          </tr>
+          ${discountAmount > 0 ? `
+            <tr>
+              <td>Discount:</td>
+              <td style="text-align: right;">-₹${discountAmount.toFixed(2)}</td>
+            </tr>
+          ` : ''}
+          ${taxAmount > 0 ? `
+            <tr>
+              <td>Tax (${taxPercentage}%):</td>
+              <td style="text-align: right;">₹${taxAmount.toFixed(2)}</td>
+            </tr>
+          ` : ''}
+          ${deliveryCharges > 0 ? `
+            <tr>
+              <td>Delivery Charges:</td>
+              <td style="text-align: right;">₹${deliveryCharges.toFixed(2)}</td>
+            </tr>
+          ` : ''}
+          <tr style="font-weight: bold; font-size: 1.1em; border-top: 1px dashed #000; border-bottom: 1px dashed #000;">
+            <td style="padding: 4px 0;">TOTAL BILL:</td>
+            <td style="text-align: right; padding: 4px 0;">₹${parseFloat(order.totalAmount).toFixed(2)}</td>
+          </tr>
+        </table>
+        <div class="double-line"></div>
+        <div class="text-center" style="margin-top: 8px; font-style: italic; font-size: 0.9em;">
+          Thank you for dining with us!
+        </div>
+      `;
+    } else {
+      // Compact B layout (all uppercase, double lines, very condensed)
+      billHtml = `
+        <div class="text-center bold" style="font-size: 1.1em; letter-spacing: 0.5px;">*** ${cafeName.toUpperCase()} ***</div>
+        <div class="text-center" style="font-size: 0.8em; line-height: 1.2;">
+          ${cafeAddress.toUpperCase()}
+        </div>
+        <div class="line"></div>
+        <div>ORDER ID: #${order.id}</div>
+        <div>DATE/TIME: ${dateTimeStr.toUpperCase()}</div>
+        <div>PAYMENT: ${paymentStatusLabel} (${order.paymentMethod.toUpperCase()})</div>
+        <div class="line"></div>
+        <div>CLIENT: ${order.customer?.name.toUpperCase()}</div>
+        ${order.deliveryMethod === 'DELIVERY' && (order.address || order.customer?.address) ? `
+          <div>DELIVERY TO: ${(order.address || order.customer.address).toUpperCase()}</div>
+        ` : '<div>TYPE: TAKEAWAY</div>'}
+        <div class="line"></div>
+        <table style="width: 100%; font-size: 0.9em;">
+          ${order.items.map(item => `
+            <tr class="item-row">
+              <td colspan="2"><strong>${item.product?.name.toUpperCase()}</strong></td>
+            </tr>
+            <tr style="border-bottom: 1px dotted #ccc;">
+              <td style="padding-left: 10px; color: #333;">${item.quantity} X ₹${item.price.toFixed(2)}</td>
+              <td style="text-align: right;">₹${(item.price * item.quantity).toFixed(2)}</td>
+            </tr>
+          `).join('')}
+        </table>
+        <div class="line"></div>
+        <table style="width: 100%; font-size: 0.95em; line-height: 1.3;">
+          <tr>
+            <td>SUBTOTAL:</td>
+            <td style="text-align: right;">₹${subtotal.toFixed(2)}</td>
+          </tr>
+          ${discountAmount > 0 ? `
+            <tr>
+              <td>DISCOUNT:</td>
+              <td style="text-align: right;">-₹${discountAmount.toFixed(2)}</td>
+            </tr>
+          ` : ''}
+          ${taxAmount > 0 ? `
+            <tr>
+              <td>TAX (${taxPercentage}%):</td>
+              <td style="text-align: right;">₹${taxAmount.toFixed(2)}</td>
+            </tr>
+          ` : ''}
+          ${deliveryCharges > 0 ? `
+            <tr>
+              <td>DELIVERY:</td>
+              <td style="text-align: right;">₹${deliveryCharges.toFixed(2)}</td>
+            </tr>
+          ` : ''}
+          <tr style="font-weight: bold; border-top: 1px dashed #000;">
+            <td>TOTAL:</td>
+            <td style="text-align: right;">₹${parseFloat(order.totalAmount).toFixed(2)}</td>
+          </tr>
+        </table>
+        <div class="line"></div>
+        <div class="text-center" style="margin-top: 5px; font-weight: bold;">THANK YOU! COME AGAIN!</div>
+      `;
+    }
+
+    printReceipt(billHtml, widthStyle, isCompact);
+  };
+
+  const printReceipt = (htmlContent, widthStyle, isCompact) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+      <html>
+        <head>
+          <title>Print Receipt</title>
+          <style>
+            @page {
+              size: auto;
+              margin: 0mm;
+            }
+            body {
+              margin: 0;
+              padding: ${isCompact ? '5px 2px' : '10px 5px'};
+              font-family: 'Courier New', Courier, monospace;
+              color: #000;
+              background-color: #fff;
+              width: ${widthStyle};
+              box-sizing: border-box;
+              font-size: ${isCompact ? (widthStyle === '48mm' ? '8.5px' : '10.5px') : (widthStyle === '48mm' ? '10px' : '12px')};
+            }
+            .receipt {
+              width: 100%;
+              max-height: 1200mm;
+              word-wrap: break-word;
+            }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .bold { font-weight: bold; }
+            .line { border-top: 1px dashed #000; margin: 4px 0; }
+            .double-line { border-top: 3px double #000; margin: 5px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { text-align: left; padding: 2px 0; }
+            .item-row td { vertical-align: top; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            ${htmlContent}
+          </div>
+          <script>
+            window.onload = function() {
+              window.focus();
+              window.print();
+              setTimeout(function() {
+                window.frameElement.remove();
+              }, 1000);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    doc.close();
   };
 
   const filteredOrders = orders.filter((o) =>
@@ -332,6 +643,40 @@ export default function Orders() {
                       <span className="text-cafeDark">₹{(item.price * item.quantity).toFixed(2)}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* Print Actions Section */}
+              <div className="space-y-3 border-t border-primary/5 pt-4">
+                <p className="text-[10px] font-bold text-cafeDark/40 uppercase tracking-widest">Print Options</p>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-cafeDark/60">Receipt Size:</span>
+                    <select
+                      value={printSize}
+                      onChange={(e) => setPrintSize(e.target.value)}
+                      className="text-xs bg-background border border-primary/15 rounded-lg px-2.5 py-1.5 font-bold outline-none text-cafeDark focus:border-primary shrink-0 cursor-pointer"
+                    >
+                      <option value="3in-a">3 Inch A (Standard)</option>
+                      <option value="3in-b">3 Inch B (Compact)</option>
+                      <option value="2in-a">2 Inch A (Standard)</option>
+                      <option value="2in-b">2 Inch B (Compact)</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handlePrintKOT(selectedOrder)}
+                      className="flex items-center justify-center gap-1.5 h-9 border border-primary/20 hover:bg-primary/5 text-cafeDark text-xs font-bold rounded-xl transition-all shadow-sm"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-primary" /> Print KOT
+                    </button>
+                    <button
+                      onClick={() => handlePrintBill(selectedOrder)}
+                      className="flex items-center justify-center gap-1.5 h-9 bg-cafeDark hover:bg-cafeDark/90 text-background text-xs font-bold rounded-xl transition-all shadow-sm"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-primary" /> Print Bill
+                    </button>
+                  </div>
                 </div>
               </div>
 
