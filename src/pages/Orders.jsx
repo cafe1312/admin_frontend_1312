@@ -3,6 +3,15 @@ import api from '../utils/api';
 import Spinner from '../components/Spinner';
 import { ShoppingBag, ChevronRight, User, Phone, Check, RefreshCw, XCircle, Download, Trash2, Printer } from 'lucide-react';
 
+const formatFontSize = (size) => {
+  if (!size) return '';
+  const trimmed = String(size).trim();
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    return `${trimmed}pt`;
+  }
+  return trimmed;
+};
+
 const SEED_ORDERS = [
   {
     id: 1045,
@@ -187,6 +196,26 @@ export default function Orders() {
   };
 
   const handlePrintKOT = (order) => {
+    const kot = cafeSettings?.kotCustomization || {
+      width: '72mm',
+      height: 'auto',
+      titleText: 'KITCHEN ORDER TICKET',
+      fontSizeTitle: '1.25em',
+      boldTitle: true,
+      fontSizeMeta: '0.9em',
+      boldMeta: false,
+      fontSizeItems: '1.0em',
+      boldItems: false,
+      fontSizeTotals: '1.1em',
+      boldTotals: true,
+      fontSizeFooter: '0.9em',
+      boldFooter: false,
+      footerText: '',
+      showCustomer: true,
+      showDateTime: true,
+      lineStyle: 'dashed'
+    };
+
     const totalItems = order.items.reduce((s, i) => s + i.quantity, 0);
     const dateTimeStr = new Date(order.createdAt).toLocaleString('en-IN', {
       day: '2-digit',
@@ -198,22 +227,29 @@ export default function Orders() {
     });
 
     const isCompact = printSize.endsWith('-b');
-    const widthStyle = printSize.startsWith('3in') ? '72mm' : '48mm';
+    // Override width if using print size preset 2in (48mm)
+    const printWidth = printSize.startsWith('2in') ? '48mm' : (kot.width || '72mm');
+
+    const styleTitle = `font-size: ${formatFontSize(kot.fontSizeTitle) || '14pt'}; ${kot.boldTitle ? 'font-weight: bold;' : ''}`;
+    const styleMeta = `font-size: ${formatFontSize(kot.fontSizeMeta) || '10pt'}; ${kot.boldMeta ? 'font-weight: bold;' : ''}`;
+    const styleItems = `font-size: ${formatFontSize(kot.fontSizeItems) || '11pt'}; ${kot.boldItems ? 'font-weight: bold;' : ''}`;
+    const styleTotals = `font-size: ${formatFontSize(kot.fontSizeTotals) || '12pt'}; ${kot.boldTotals ? 'font-weight: bold;' : ''}`;
+    const styleFooter = `font-size: ${formatFontSize(kot.fontSizeFooter) || '10pt'}; ${kot.boldFooter ? 'font-weight: bold;' : ''}`;
 
     let kotHtml = '';
 
     if (!isCompact) {
-      // Standard A layout
+      // Standard layout
       kotHtml = `
-        <div class="text-center bold" style="font-size: 1.25em; margin-bottom: 2px;">KITCHEN ORDER TICKET</div>
+        <div class="text-center" style="${styleTitle} margin-bottom: 2px;">${kot.titleText || 'KITCHEN ORDER TICKET'}</div>
         <div class="text-center" style="font-size: 0.9em; margin-bottom: 5px;">--- LIVE ORDER ---</div>
         <div class="line"></div>
-        <div><span class="bold">Order ID:</span> #${order.id}</div>
-        <div><span class="bold">Date/Time:</span> ${dateTimeStr}</div>
-        <div><span class="bold">Customer:</span> ${order.customer?.name || 'Walk-in'}</div>
+        <div style="${styleMeta}"><span class="bold">Order ID:</span> #${order.id}</div>
+        ${kot.showDateTime ? `<div style="${styleMeta}"><span class="bold">Date/Time:</span> ${dateTimeStr}</div>` : ''}
+        ${kot.showCustomer ? `<div style="${styleMeta}"><span class="bold">Customer:</span> ${order.customer?.name || 'Walk-in'}</div>` : ''}
         <div class="line"></div>
         <div class="bold" style="margin-top: 5px; margin-bottom: 3px; font-size: 1.05em;">ITEMS:</div>
-        <table style="font-size: 1em;">
+        <table style="${styleItems}">
           ${order.items.map(item => `
             <tr class="item-row">
               <td style="width: 80%;">${item.product?.name}</td>
@@ -222,19 +258,20 @@ export default function Orders() {
           `).join('')}
         </table>
         <div class="line"></div>
-        <div class="bold" style="font-size: 1.1em; text-align: right; margin-top: 5px;">Total Qty: ${totalItems}</div>
+        <div style="${styleTotals} text-align: right; margin-top: 5px;">Total Qty: ${totalItems}</div>
+        ${kot.footerText ? `<div class="line"></div><div class="text-center" style="${styleFooter} margin-top: 5px;">${kot.footerText}</div>` : ''}
         <div class="line"></div>
       `;
     } else {
-      // Compact B layout (all uppercase, very condensed)
+      // Compact layout
       kotHtml = `
-        <div class="text-center bold" style="font-size: 1.05em; letter-spacing: 0.5px;">* KITCHEN TICKET *</div>
+        <div class="text-center" style="${styleTitle} letter-spacing: 0.5px;">* ${(kot.titleText || 'KITCHEN TICKET').toUpperCase()} *</div>
         <div class="line"></div>
-        <div>ORDER ID: #${order.id}</div>
-        <div>DATE/TIME: ${dateTimeStr.toUpperCase()}</div>
-        <div>CLIENT: ${(order.customer?.name || 'WALK-IN').toUpperCase()}</div>
+        <div style="${styleMeta}">ORDER ID: #${order.id}</div>
+        ${kot.showDateTime ? `<div style="${styleMeta}">DATE/TIME: ${dateTimeStr.toUpperCase()}</div>` : ''}
+        ${kot.showCustomer ? `<div style="${styleMeta}">CLIENT: ${(order.customer?.name || 'WALK-IN').toUpperCase()}</div>` : ''}
         <div class="line"></div>
-        <table style="font-size: 0.95em;">
+        <table style="${styleItems}">
           ${order.items.map(item => `
             <tr class="item-row">
               <td><strong>${item.product?.name.toUpperCase()}</strong></td>
@@ -243,16 +280,43 @@ export default function Orders() {
           `).join('')}
         </table>
         <div class="line"></div>
-        <div style="font-weight: bold;">TOTAL ITEMS: ${totalItems}</div>
+        <div style="${styleTotals}">TOTAL ITEMS: ${totalItems}</div>
+        ${kot.footerText ? `<div class="line"></div><div class="text-center" style="${styleFooter} margin-top: 5px;">${kot.footerText.toUpperCase()}</div>` : ''}
         <div class="line"></div>
       `;
     }
 
-    printReceipt(kotHtml, widthStyle, isCompact);
+    printReceipt(kotHtml, {
+      width: printWidth,
+      height: kot.height || 'auto',
+      isCompact,
+      lineStyle: kot.lineStyle || 'dashed'
+    });
   };
 
   const handlePrintBill = (order) => {
-    const cafeName = cafeSettings?.cafeName || '1312 Cafe';
+    const bill = cafeSettings?.billCustomization || {
+      width: '72mm',
+      height: 'auto',
+      titleText: cafeSettings?.cafeName || '1312 Cafe',
+      fontSizeTitle: '1.35em',
+      boldTitle: true,
+      fontSizeHeader: '0.85em',
+      boldHeader: false,
+      fontSizeMeta: '0.95em',
+      boldMeta: false,
+      fontSizeItems: '0.95em',
+      boldItems: false,
+      fontSizeTotals: '1.1em',
+      boldTotals: true,
+      fontSizeFooter: '0.9em',
+      boldFooter: false,
+      footerText: 'Thank you for dining with us!',
+      showAddress: true,
+      showPhone: true,
+      lineStyle: 'dashed'
+    };
+
     const cafeAddress = cafeSettings?.address || '1312 Gourmet St, Culinary City';
     const cafePhone = cafeSettings?.phone || '+1 234 567 8900';
     const taxPercentage = cafeSettings ? parseFloat(cafeSettings.taxPercentage) : 8.0;
@@ -277,31 +341,39 @@ export default function Orders() {
     const taxAmount = taxableAmount * (taxPercentage / 100);
 
     const isCompact = printSize.endsWith('-b');
-    const widthStyle = printSize.startsWith('3in') ? '72mm' : '48mm';
+    const printWidth = printSize.startsWith('2in') ? '48mm' : (bill.width || '72mm');
+
+    const styleTitle = `font-size: ${formatFontSize(bill.fontSizeTitle) || '16pt'}; ${bill.boldTitle ? 'font-weight: bold;' : ''}`;
+    const styleHeader = `font-size: ${formatFontSize(bill.fontSizeHeader) || '10pt'}; ${bill.boldHeader ? 'font-weight: bold;' : ''}`;
+    const styleMeta = `font-size: ${formatFontSize(bill.fontSizeMeta) || '11pt'}; ${bill.boldMeta ? 'font-weight: bold;' : ''}`;
+    const styleItems = `font-size: ${formatFontSize(bill.fontSizeItems) || '11pt'}; ${bill.boldItems ? 'font-weight: bold;' : ''}`;
+    const styleTotals = `font-size: ${formatFontSize(bill.fontSizeTotals) || '13pt'}; ${bill.boldTotals ? 'font-weight: bold;' : ''}`;
+    const styleFooter = `font-size: ${formatFontSize(bill.fontSizeFooter) || '10pt'}; ${bill.boldFooter ? 'font-weight: bold;' : ''}`;
 
     let billHtml = '';
 
     if (!isCompact) {
-      // Standard A layout
+      // Standard layout
       billHtml = `
-        <div class="text-center bold" style="font-size: 1.35em; margin-bottom: 2px;">${cafeName}</div>
-        <div class="text-center" style="font-size: 0.85em; margin-bottom: 5px; line-height: 1.2;">
-          ${cafeAddress}<br>Phone: ${cafePhone}
+        <div class="text-center" style="${styleTitle} margin-bottom: 2px;">${bill.titleText || cafeSettings?.cafeName || '1312 Cafe'}</div>
+        <div class="text-center" style="${styleHeader} margin-bottom: 5px; line-height: 1.2;">
+          ${bill.showAddress ? `${cafeAddress}<br>` : ''}
+          ${bill.showPhone ? `Phone: ${cafePhone}` : ''}
         </div>
         <div class="double-line"></div>
-        <div><span class="bold">Order ID:</span> #${order.id}</div>
-        <div><span class="bold">Date/Time:</span> ${dateTimeStr}</div>
-        <div><span class="bold">Payment:</span> <span class="bold" style="border: 1px solid #000; padding: 0 4px;">${paymentStatusLabel}</span> (${order.paymentMethod})</div>
+        <div style="${styleMeta}"><span class="bold">Order ID:</span> #${order.id}</div>
+        <div style="${styleMeta}"><span class="bold">Date/Time:</span> ${dateTimeStr}</div>
+        <div style="${styleMeta}"><span class="bold">Payment:</span> <span class="bold" style="border: 1px solid #000; padding: 0 4px;">${paymentStatusLabel}</span> (${order.paymentMethod})</div>
         <div class="line"></div>
-        <div><span class="bold">Customer:</span> ${order.customer?.name}</div>
-        ${order.customer?.phone ? `<div><span class="bold">Phone:</span> ${order.customer.phone}</div>` : ''}
-        ${order.deliveryMethod === 'DELIVERY' && (order.address || order.customer?.address) ? `
-          <div style="margin-top: 3px; font-size: 0.9em; line-height: 1.2;">
+        <div style="${styleMeta}"><span class="bold">Customer:</span> ${order.customer?.name}</div>
+        ${order.customer?.phone && bill.showPhone ? `<div style="${styleMeta}"><span class="bold">Phone:</span> ${order.customer.phone}</div>` : ''}
+        ${order.deliveryMethod === 'DELIVERY' && (order.address || order.customer?.address) && bill.showAddress ? `
+          <div style="${styleMeta} margin-top: 3px; line-height: 1.2;">
             <span class="bold">Delivery Address:</span><br>${order.address || order.customer.address}
           </div>
-        ` : '<div><span class="bold">Method:</span> TAKEAWAY</div>'}
+        ` : `<div style="${styleMeta}"><span class="bold">Method:</span> TAKEAWAY</div>`}
         <div class="double-line"></div>
-        <table style="width: 100%; font-size: 0.95em;">
+        <table style="width: 100%; ${styleItems}">
           <thead>
             <tr style="border-bottom: 1px dashed #000;">
               <th style="width: 55%; font-weight: bold;">Item</th>
@@ -320,7 +392,7 @@ export default function Orders() {
           </tbody>
         </table>
         <div class="line"></div>
-        <table style="width: 100%; font-size: 0.95em; line-height: 1.4;">
+        <table style="width: 100%; ${styleTotals} line-height: 1.4;">
           <tr>
             <td>Subtotal:</td>
             <td style="text-align: right;">₹${subtotal.toFixed(2)}</td>
@@ -343,34 +415,34 @@ export default function Orders() {
               <td style="text-align: right;">₹${deliveryCharges.toFixed(2)}</td>
             </tr>
           ` : ''}
-          <tr style="font-weight: bold; font-size: 1.1em; border-top: 1px dashed #000; border-bottom: 1px dashed #000;">
+          <tr style="font-weight: bold; border-top: 1px dashed #000; border-bottom: 1px dashed #000;">
             <td style="padding: 4px 0;">TOTAL BILL:</td>
             <td style="text-align: right; padding: 4px 0;">₹${parseFloat(order.totalAmount).toFixed(2)}</td>
           </tr>
         </table>
         <div class="double-line"></div>
-        <div class="text-center" style="margin-top: 8px; font-style: italic; font-size: 0.9em;">
-          Thank you for dining with us!
+        <div class="text-center" style="${styleFooter} margin-top: 8px; font-style: italic;">
+          ${bill.footerText || 'Thank you for dining with us!'}
         </div>
       `;
     } else {
-      // Compact B layout (all uppercase, double lines, very condensed)
+      // Compact layout
       billHtml = `
-        <div class="text-center bold" style="font-size: 1.1em; letter-spacing: 0.5px;">*** ${cafeName.toUpperCase()} ***</div>
-        <div class="text-center" style="font-size: 0.8em; line-height: 1.2;">
-          ${cafeAddress.toUpperCase()}
+        <div class="text-center" style="${styleTitle} letter-spacing: 0.5px;">*** ${(bill.titleText || cafeSettings?.cafeName || '1312 CAFE').toUpperCase()} ***</div>
+        <div class="text-center" style="${styleHeader} line-height: 1.2;">
+          ${bill.showAddress ? `${cafeAddress.toUpperCase()}` : ''}
         </div>
         <div class="line"></div>
-        <div>ORDER ID: #${order.id}</div>
-        <div>DATE/TIME: ${dateTimeStr.toUpperCase()}</div>
-        <div>PAYMENT: ${paymentStatusLabel} (${order.paymentMethod.toUpperCase()})</div>
+        <div style="${styleMeta}">ORDER ID: #${order.id}</div>
+        <div style="${styleMeta}">DATE/TIME: ${dateTimeStr.toUpperCase()}</div>
+        <div style="${styleMeta}">PAYMENT: ${paymentStatusLabel} (${order.paymentMethod.toUpperCase()})</div>
         <div class="line"></div>
-        <div>CLIENT: ${order.customer?.name.toUpperCase()}</div>
-        ${order.deliveryMethod === 'DELIVERY' && (order.address || order.customer?.address) ? `
-          <div>DELIVERY TO: ${(order.address || order.customer.address).toUpperCase()}</div>
-        ` : '<div>TYPE: TAKEAWAY</div>'}
+        <div style="${styleMeta}">CLIENT: ${order.customer?.name.toUpperCase()}</div>
+        ${order.deliveryMethod === 'DELIVERY' && (order.address || order.customer?.address) && bill.showAddress ? `
+          <div style="${styleMeta}">DELIVERY TO: ${(order.address || order.customer.address).toUpperCase()}</div>
+        ` : `<div style="${styleMeta}">TYPE: TAKEAWAY</div>`}
         <div class="line"></div>
-        <table style="width: 100%; font-size: 0.9em;">
+        <table style="width: 100%; ${styleItems}">
           ${order.items.map(item => `
             <tr class="item-row">
               <td colspan="2"><strong>${item.product?.name.toUpperCase()}</strong></td>
@@ -382,7 +454,7 @@ export default function Orders() {
           `).join('')}
         </table>
         <div class="line"></div>
-        <table style="width: 100%; font-size: 0.95em; line-height: 1.3;">
+        <table style="width: 100%; ${styleTotals} line-height: 1.3;">
           <tr>
             <td>SUBTOTAL:</td>
             <td style="text-align: right;">₹${subtotal.toFixed(2)}</td>
@@ -411,20 +483,33 @@ export default function Orders() {
           </tr>
         </table>
         <div class="line"></div>
-        <div class="text-center" style="margin-top: 5px; font-weight: bold;">THANK YOU! COME AGAIN!</div>
+        <div class="text-center" style="${styleFooter} margin-top: 5px; font-weight: bold;">
+          ${(bill.footerText || 'THANK YOU! COME AGAIN!').toUpperCase()}
+        </div>
       `;
     }
 
-    printReceipt(billHtml, widthStyle, isCompact);
+    printReceipt(billHtml, {
+      width: printWidth,
+      height: bill.height || 'auto',
+      isCompact,
+      lineStyle: bill.lineStyle || 'dashed'
+    });
   };
 
-  const printReceipt = (htmlContent, widthStyle, isCompact) => {
+  const printReceipt = (htmlContent, config) => {
     const iframe = document.createElement('iframe');
     iframe.style.position = 'absolute';
     iframe.style.width = '0px';
     iframe.style.height = '0px';
     iframe.style.border = 'none';
     document.body.appendChild(iframe);
+
+    const widthStyle = config?.width || '72mm';
+    const heightStyle = config?.height || 'auto';
+    const lineStyle = config?.lineStyle || 'dashed';
+    const bodyPadding = config?.isCompact ? '5px 2px' : '10px 5px';
+    const baseFontSize = config?.isCompact ? (widthStyle === '48mm' ? '8.5px' : '10.5px') : (widthStyle === '48mm' ? '10px' : '12px');
 
     const doc = iframe.contentWindow.document;
     doc.open();
@@ -439,13 +524,14 @@ export default function Orders() {
             }
             body {
               margin: 0;
-              padding: ${isCompact ? '5px 2px' : '10px 5px'};
+              padding: ${bodyPadding};
               font-family: 'Courier New', Courier, monospace;
               color: #000;
               background-color: #fff;
               width: ${widthStyle};
+              height: ${heightStyle};
               box-sizing: border-box;
-              font-size: ${isCompact ? (widthStyle === '48mm' ? '8.5px' : '10.5px') : (widthStyle === '48mm' ? '10px' : '12px')};
+              font-size: ${baseFontSize};
             }
             .receipt {
               width: 100%;
@@ -455,7 +541,7 @@ export default function Orders() {
             .text-center { text-align: center; }
             .text-right { text-align: right; }
             .bold { font-weight: bold; }
-            .line { border-top: 1px dashed #000; margin: 4px 0; }
+            .line { border-top: 1px ${lineStyle} #000; margin: 4px 0; }
             .double-line { border-top: 3px double #000; margin: 5px 0; }
             table { width: 100%; border-collapse: collapse; }
             th, td { text-align: left; padding: 2px 0; }

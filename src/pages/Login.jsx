@@ -113,7 +113,7 @@ export default function Login() {
           </div>
         </form>
 
-        {/* Helper credentials removed for production security */}
+
       </div>
     </div>
   );

@@ -3,6 +3,15 @@ import api from '../utils/api';
 import Spinner from '../components/Spinner';
 import { Save, CheckCircle2 } from 'lucide-react';
 
+const formatFontSize = (size) => {
+  if (!size) return '';
+  const trimmed = String(size).trim();
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    return `${trimmed}pt`;
+  }
+  return trimmed;
+};
+
 export default function Settings() {
   const [formData, setFormData] = useState({
     cafeName: '1312 Cafe',
@@ -76,21 +85,105 @@ export default function Settings() {
     loadSettingsAndProducts();
   }, []);
 
+  // Initialize and update Leaflet map for shop location
+  useEffect(() => {
+    if (loading) return;
+
+    const mapId = 'map-shop';
+    const container = document.getElementById(mapId);
+    if (!container) return;
+
+    const lat = parseFloat(formData.shopLatitude) || 19.5786;
+    const lon = parseFloat(formData.shopLongitude) || 72.8223;
+
+    if (container._leaflet_id) {
+      if (window.shopMap && window.shopMarker) {
+        const newLatLng = [lat, lon];
+        window.shopMarker.setLatLng(newLatLng);
+        window.shopMap.setView(newLatLng, window.shopMap.getZoom());
+      }
+      return;
+    }
+
+    const map = L.map(mapId).setView([lat, lon], 14);
+    window.shopMap = map;
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    const shopIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    });
+
+    const marker = L.marker([lat, lon], {
+      icon: shopIcon,
+      draggable: true
+    }).addTo(map).bindPopup('1312 Cafe (Drag to position)').openPopup();
+
+    window.shopMarker = marker;
+
+    marker.on('dragend', () => {
+      const latLng = marker.getLatLng();
+      setFormData(prev => ({
+        ...prev,
+        shopLatitude: parseFloat(latLng.lat.toFixed(6)),
+        shopLongitude: parseFloat(latLng.lng.toFixed(6))
+      }));
+    });
+
+    map.on('click', (e) => {
+      const latLng = e.latlng;
+      marker.setLatLng(latLng);
+      setFormData(prev => ({
+        ...prev,
+        shopLatitude: parseFloat(latLng.lat.toFixed(6)),
+        shopLongitude: parseFloat(latLng.lng.toFixed(6))
+      }));
+    });
+  }, [formData.shopLatitude, formData.shopLongitude, loading]);
+
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
+    const finalValue = type === 'checkbox' ? checked : value;
+
     if (name.startsWith('hours_')) {
       const field = name.replace('hours_', '');
       setFormData({
         ...formData,
         businessHours: {
           ...formData.businessHours,
-          [field]: value
+          [field]: finalValue
+        }
+      });
+    } else if (name.startsWith('kot_')) {
+      const field = name.replace('kot_', '');
+      setFormData({
+        ...formData,
+        kotCustomization: {
+          ...formData.kotCustomization,
+          [field]: finalValue
+        }
+      });
+    } else if (name.startsWith('bill_')) {
+      const field = name.replace('bill_', '');
+      setFormData({
+        ...formData,
+        billCustomization: {
+          ...formData.billCustomization,
+          [field]: finalValue
         }
       });
     } else {
       setFormData({
         ...formData,
-        [name]: value
+        [name]: finalValue
       });
     }
   };
@@ -342,6 +435,637 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Shop Location Map Picker */}
+        <div className="space-y-2 pt-2 border-t border-primary/5">
+          <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Cafe Shop Location (Drag green marker to position)</label>
+          <div className="w-full h-64 rounded-2xl border border-primary/10 overflow-hidden relative z-10" id="map-shop"></div>
+        </div>
+      </div>
+
+      {/* 2.8. Receipt & KOT Printing Customization Card */}
+      <div className="bg-white border border-primary/10 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <h3 className="font-serif text-lg font-bold text-cafeDark border-b border-primary/5 pb-4">Receipt & KOT Customization</h3>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Controls Column */}
+          <div className="lg:col-span-7 space-y-6">
+            
+            {/* KOT Section */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-primary uppercase tracking-wider">Kitchen Order Ticket (KOT) Settings</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">KOT Title Text</label>
+                  <input
+                    type="text"
+                    name="kot_titleText"
+                    value={formData.kotCustomization?.titleText || ''}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">KOT Width Style (e.g. 72mm, 48mm, 80mm)</label>
+                  <input
+                    type="text"
+                    name="kot_width"
+                    value={formData.kotCustomization?.width || ''}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">KOT Height Style (e.g. auto, 150mm)</label>
+                  <input
+                    type="text"
+                    name="kot_height"
+                    value={formData.kotCustomization?.height || ''}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">KOT Line Style (dashed, solid, double, dotted)</label>
+                  <select
+                    name="kot_lineStyle"
+                    value={formData.kotCustomization?.lineStyle || 'dashed'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  >
+                    <option value="dashed">Dashed</option>
+                    <option value="solid">Solid</option>
+                    <option value="double">Double</option>
+                    <option value="dotted">Dotted</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border border-primary/5 p-4 rounded-2xl bg-background/50">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Title Font Size</label>
+                  <input
+                    type="text"
+                    name="kot_fontSizeTitle"
+                    value={formData.kotCustomization?.fontSizeTitle || '1.25em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="kot_boldTitle"
+                      checked={!!formData.kotCustomization?.boldTitle}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Title
+                  </label>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Meta Font Size</label>
+                  <input
+                    type="text"
+                    name="kot_fontSizeMeta"
+                    value={formData.kotCustomization?.fontSizeMeta || '0.9em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="kot_boldMeta"
+                      checked={!!formData.kotCustomization?.boldMeta}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Meta
+                  </label>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Items Font Size</label>
+                  <input
+                    type="text"
+                    name="kot_fontSizeItems"
+                    value={formData.kotCustomization?.fontSizeItems || '1em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="kot_boldItems"
+                      checked={!!formData.kotCustomization?.boldItems}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Items
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Visibility Options</label>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-cafeDark cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="kot_showCustomer"
+                        checked={!!formData.kotCustomization?.showCustomer}
+                        onChange={handleChange}
+                        className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-4.5 w-4.5"
+                      /> Show Customer Name
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-cafeDark cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="kot_showDateTime"
+                        checked={!!formData.kotCustomization?.showDateTime}
+                        onChange={handleChange}
+                        className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-4.5 w-4.5"
+                      /> Show Date/Time
+                    </label>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Totals Font Size</label>
+                  <input
+                    type="text"
+                    name="kot_fontSizeTotals"
+                    value={formData.kotCustomization?.fontSizeTotals || '1.1em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="kot_boldTotals"
+                      checked={!!formData.kotCustomization?.boldTotals}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Totals
+                  </label>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-cafeDark/60 uppercase">KOT Footer Text (Optional)</label>
+                <input
+                  type="text"
+                  name="kot_footerText"
+                  value={formData.kotCustomization?.footerText || ''}
+                  onChange={handleChange}
+                  className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Bill Section */}
+            <div className="border-t border-primary/10 pt-6 space-y-4">
+              <h4 className="text-xs font-bold text-primary uppercase tracking-wider">Billing Receipt (Bill) Settings</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Bill Title / Shop name</label>
+                  <input
+                    type="text"
+                    name="bill_titleText"
+                    value={formData.billCustomization?.titleText || ''}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Bill Width Style (e.g. 72mm, 48mm, 80mm)</label>
+                  <input
+                    type="text"
+                    name="bill_width"
+                    value={formData.billCustomization?.width || ''}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Bill Height Style (e.g. auto, 150mm)</label>
+                  <input
+                    type="text"
+                    name="bill_height"
+                    value={formData.billCustomization?.height || ''}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Bill Line Style (dashed, solid, double, dotted)</label>
+                  <select
+                    name="bill_lineStyle"
+                    value={formData.billCustomization?.lineStyle || 'dashed'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  >
+                    <option value="dashed">Dashed</option>
+                    <option value="solid">Solid</option>
+                    <option value="double">Double</option>
+                    <option value="dotted">Dotted</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border border-primary/5 p-4 rounded-2xl bg-background/50">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Title Font Size</label>
+                  <input
+                    type="text"
+                    name="bill_fontSizeTitle"
+                    value={formData.billCustomization?.fontSizeTitle || '1.35em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="bill_boldTitle"
+                      checked={!!formData.billCustomization?.boldTitle}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Title
+                  </label>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Header Details Font Size</label>
+                  <input
+                    type="text"
+                    name="bill_fontSizeHeader"
+                    value={formData.billCustomization?.fontSizeHeader || '0.85em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="bill_boldHeader"
+                      checked={!!formData.billCustomization?.boldHeader}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Header
+                  </label>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Meta Font Size</label>
+                  <input
+                    type="text"
+                    name="bill_fontSizeMeta"
+                    value={formData.billCustomization?.fontSizeMeta || '0.95em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="bill_boldMeta"
+                      checked={!!formData.billCustomization?.boldMeta}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Meta
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border border-primary/5 p-4 rounded-2xl bg-background/50">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Items Font Size</label>
+                  <input
+                    type="text"
+                    name="bill_fontSizeItems"
+                    value={formData.billCustomization?.fontSizeItems || '0.95em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="bill_boldItems"
+                      checked={!!formData.billCustomization?.boldItems}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Items
+                  </label>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Totals Font Size</label>
+                  <input
+                    type="text"
+                    name="bill_fontSizeTotals"
+                    value={formData.billCustomization?.fontSizeTotals || '1.1em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="bill_boldTotals"
+                      checked={!!formData.billCustomization?.boldTotals}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Totals
+                  </label>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Footer Font Size</label>
+                  <input
+                    type="text"
+                    name="bill_fontSizeFooter"
+                    value={formData.billCustomization?.fontSizeFooter || '0.9em'}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                  <label className="flex items-center gap-1.5 mt-1 text-[10px] text-cafeDark/80 cursor-pointer font-semibold">
+                    <input
+                      type="checkbox"
+                      name="bill_boldFooter"
+                      checked={!!formData.billCustomization?.boldFooter}
+                      onChange={handleChange}
+                      className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-3.5 w-3.5"
+                    /> Bold Footer
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Visibility Options</label>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-cafeDark cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="bill_showAddress"
+                        checked={!!formData.billCustomization?.showAddress}
+                        onChange={handleChange}
+                        className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-4.5 w-4.5"
+                      /> Show Cafe Address
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-cafeDark cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="bill_showPhone"
+                        checked={!!formData.billCustomization?.showPhone}
+                        onChange={handleChange}
+                        className="rounded border-primary/30 text-primary bg-background focus:ring-primary h-4.5 w-4.5"
+                      /> Show Phones
+                    </label>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-cafeDark/60 uppercase">Bill Footer Text</label>
+                  <input
+                    type="text"
+                    name="bill_footerText"
+                    value={formData.billCustomization?.footerText || ''}
+                    onChange={handleChange}
+                    className="w-full h-10 px-3 bg-background border border-primary/20 rounded-xl text-xs focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Previews Column */}
+          <div className="lg:col-span-5 space-y-8 lg:sticky lg:top-6 self-start bg-background p-4 rounded-3xl border border-primary/5">
+            
+            {/* KOT Preview Card */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-primary uppercase tracking-widest text-center">KOT Live Simulator</h4>
+              <div 
+                className="bg-white text-black p-4 shadow-md rounded border border-gray-300 mx-auto font-mono text-left select-none overflow-hidden transition-all duration-300"
+                style={{
+                  width: formData.kotCustomization?.width || '72mm',
+                  minHeight: '150px',
+                  maxWidth: '100%',
+                }}
+              >
+                {/* Title */}
+                <div 
+                  className="text-center" 
+                  style={{
+                    fontSize: formatFontSize(formData.kotCustomization?.fontSizeTitle) || '14pt',
+                    fontWeight: formData.kotCustomization?.boldTitle ? 'bold' : 'normal',
+                    marginBottom: '2px'
+                  }}
+                >
+                  {formData.kotCustomization?.titleText || 'KITCHEN ORDER TICKET'}
+                </div>
+                <div className="text-center" style={{ fontSize: '10pt', marginBottom: '5px' }}>--- LIVE ORDER ---</div>
+                
+                {/* Line */}
+                <div style={{ borderTop: `1px ${formData.kotCustomization?.lineStyle || 'dashed'} #000`, margin: '4px 0' }}></div>
+                
+                {/* Meta */}
+                <div 
+                  style={{
+                    fontSize: formatFontSize(formData.kotCustomization?.fontSizeMeta) || '10pt',
+                    fontWeight: formData.kotCustomization?.boldMeta ? 'bold' : 'normal'
+                  }}
+                >
+                  <div><span className="font-bold">Order ID:</span> #1085</div>
+                  {formData.kotCustomization?.showDateTime && <div><span className="font-bold">Date/Time:</span> 10/07/2026, 09:30 PM</div>}
+                  {formData.kotCustomization?.showCustomer && <div><span className="font-bold">Customer:</span> John Doe</div>}
+                </div>
+
+                {/* Line */}
+                <div style={{ borderTop: `1px ${formData.kotCustomization?.lineStyle || 'dashed'} #000`, margin: '4px 0' }}></div>
+                
+                {/* Items */}
+                <div className="font-bold" style={{ marginTop: '5px', marginBottom: '3px', fontSize: '11pt' }}>ITEMS:</div>
+                <table 
+                  className="w-full text-left" 
+                  style={{
+                    fontSize: formatFontSize(formData.kotCustomization?.fontSizeItems) || '11pt',
+                    fontWeight: formData.kotCustomization?.boldItems ? 'bold' : 'normal'
+                  }}
+                >
+                  <tbody>
+                    <tr>
+                      <td style={{ width: '80%' }}>Artisanal Cappuccino</td>
+                      <td style={{ width: '20%', textAlign: 'right' }} className="font-bold">x2</td>
+                    </tr>
+                    <tr>
+                      <td style={{ width: '80%' }}>Avocado Toast</td>
+                      <td style={{ width: '20%', textAlign: 'right' }} className="font-bold">x1</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Line */}
+                <div style={{ borderTop: `1px ${formData.kotCustomization?.lineStyle || 'dashed'} #000`, margin: '4px 0' }}></div>
+                
+                {/* Totals */}
+                <div 
+                  className="text-right" 
+                  style={{
+                    fontSize: formatFontSize(formData.kotCustomization?.fontSizeTotals) || '12pt',
+                    fontWeight: formData.kotCustomization?.boldTotals ? 'bold' : 'normal',
+                    marginTop: '5px'
+                  }}
+                >
+                  Total Qty: 3
+                </div>
+
+                {/* Optional Footer */}
+                {formData.kotCustomization?.footerText && (
+                  <>
+                    <div style={{ borderTop: `1px ${formData.kotCustomization?.lineStyle || 'dashed'} #000`, margin: '4px 0' }}></div>
+                    <div 
+                      className="text-center" 
+                      style={{
+                        fontSize: formatFontSize(formData.kotCustomization?.fontSizeFooter) || '10pt',
+                        fontWeight: formData.kotCustomization?.boldFooter ? 'bold' : 'normal',
+                        marginTop: '5px'
+                      }}
+                    >
+                      {formData.kotCustomization.footerText}
+                    </div>
+                  </>
+                )}
+                {/* Bottom line */}
+                <div style={{ borderTop: `1px ${formData.kotCustomization?.lineStyle || 'dashed'} #000`, margin: '4px 0' }}></div>
+              </div>
+            </div>
+
+            {/* Bill Preview Card */}
+            <div className="space-y-3 border-t border-primary/5 pt-6">
+              <h4 className="text-xs font-bold text-primary uppercase tracking-widest text-center">Bill Live Simulator</h4>
+              <div 
+                className="bg-white text-black p-4 shadow-md rounded border border-gray-300 mx-auto font-mono text-left select-none overflow-hidden transition-all duration-300"
+                style={{
+                  width: formData.billCustomization?.width || '72mm',
+                  minHeight: '200px',
+                  maxWidth: '100%',
+                }}
+              >
+                {/* Title */}
+                <div 
+                  className="text-center" 
+                  style={{
+                    fontSize: formatFontSize(formData.billCustomization?.fontSizeTitle) || '16pt',
+                    fontWeight: formData.billCustomization?.boldTitle ? 'bold' : 'normal',
+                    marginBottom: '2px'
+                  }}
+                >
+                  {formData.billCustomization?.titleText || formData.cafeName || '1312 Cafe'}
+                </div>
+                
+                {/* Header info */}
+                <div 
+                  className="text-center" 
+                  style={{
+                    fontSize: formatFontSize(formData.billCustomization?.fontSizeHeader) || '10pt',
+                    fontWeight: formData.billCustomization?.boldHeader ? 'bold' : 'normal',
+                    marginBottom: '5px',
+                    lineHeight: '1.2'
+                  }}
+                >
+                  {formData.billCustomization?.showAddress && <>{formData.address || '1312 Gourmet St, Culinary City'}<br /></>}
+                  {formData.billCustomization?.showPhone && <>Phone: {formData.phone || '+1 234 567 8900'}</>}
+                </div>
+                
+                <div style={{ borderTop: `3px double #000`, margin: '5px 0' }}></div>
+                
+                {/* Meta */}
+                <div 
+                  style={{
+                    fontSize: formatFontSize(formData.billCustomization?.fontSizeMeta) || '11pt',
+                    fontWeight: formData.billCustomization?.boldMeta ? 'bold' : 'normal'
+                  }}
+                >
+                  <div><span className="font-bold">Order ID:</span> #1085</div>
+                  <div><span className="font-bold">Date/Time:</span> 10/07/2026, 09:30 PM</div>
+                  <div><span className="font-bold">Payment:</span> <span className="font-bold border border-black px-1">PAID</span> (CARD)</div>
+                  <div style={{ borderTop: `1px ${formData.billCustomization?.lineStyle || 'dashed'} #000`, margin: '4px 0' }}></div>
+                  <div><span className="font-bold">Customer:</span> John Doe</div>
+                  {formData.billCustomization?.showPhone && <div><span className="font-bold">Phone:</span> +1 987 654 3210</div>}
+                  {formData.billCustomization?.showAddress && <div><span className="font-bold">Delivery Address:</span><br />123 Maple Avenue, Apt 4B</div>}
+                </div>
+
+                <div style={{ borderTop: `3px double #000`, margin: '5px 0' }}></div>
+                
+                {/* Table */}
+                <table 
+                  className="w-full text-left" 
+                  style={{
+                    fontSize: formatFontSize(formData.billCustomization?.fontSizeItems) || '11pt',
+                    fontWeight: formData.billCustomization?.boldItems ? 'bold' : 'normal'
+                  }}
+                >
+                  <thead>
+                    <tr style={{ borderBottom: '1px dashed #000' }}>
+                      <th className="font-bold text-left">Item</th>
+                      <th className="font-bold text-center">Qty</th>
+                      <th className="font-bold text-right">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Artisanal Cappuccino</td>
+                      <td className="text-center">2</td>
+                      <td className="text-right">₹360.00</td>
+                    </tr>
+                    <tr>
+                      <td>Avocado Toast</td>
+                      <td className="text-center">1</td>
+                      <td className="text-right">₹220.00</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Line */}
+                <div style={{ borderTop: `1px ${formData.billCustomization?.lineStyle || 'dashed'} #000`, margin: '4px 0' }}></div>
+                
+                {/* Totals */}
+                <table 
+                  className="w-full text-left" 
+                  style={{
+                    fontSize: formatFontSize(formData.billCustomization?.fontSizeTotals) || '13pt',
+                    fontWeight: formData.billCustomization?.boldTotals ? 'bold' : 'normal',
+                    lineHeight: '1.4'
+                  }}
+                >
+                  <tbody>
+                    <tr>
+                      <td>Subtotal:</td>
+                      <td className="text-right">₹580.00</td>
+                    </tr>
+                    <tr>
+                      <td>Tax (8%):</td>
+                      <td className="text-right">₹46.40</td>
+                    </tr>
+                    <tr style={{ fontWeight: 'bold', borderTop: '1px dashed #000', borderBottom: '1px dashed #000' }}>
+                      <td className="py-1">TOTAL BILL:</td>
+                      <td className="text-right py-1">₹626.40</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style={{ borderTop: `3px double #000`, margin: '5px 0' }}></div>
+                
+                {/* Footer */}
+                <div 
+                  className="text-center italic" 
+                  style={{
+                    fontSize: formatFontSize(formData.billCustomization?.fontSizeFooter) || '10pt',
+                    fontWeight: formData.billCustomization?.boldFooter ? 'bold' : 'normal',
+                    marginTop: '8px'
+                  }}
+                >
+                  {formData.billCustomization?.footerText || 'Thank you for dining with us!'}
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </div>
 
       {/* 3. Customer Home Page Settings Card */}
