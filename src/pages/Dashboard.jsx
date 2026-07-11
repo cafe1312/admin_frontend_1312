@@ -193,7 +193,7 @@ export default function Dashboard() {
       }
     }
     loadDashboard();
-    const interval = setInterval(loadDashboard, 10000);
+    const interval = setInterval(loadDashboard, 3000);
     return () => clearInterval(interval);
   }, [range]);
 

@@ -124,7 +124,7 @@ export default function Orders() {
     // Auto poll orders for a real-time admin experience
     const interval = setInterval(() => {
       fetchOrders();
-    }, 10000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, []);
